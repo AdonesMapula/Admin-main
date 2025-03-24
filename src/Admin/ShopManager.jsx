@@ -9,7 +9,7 @@ function ShopManager() {
   const [soldItems, setSoldItems] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatus, setFilterStatus] = useState("Pending");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const printRef = useRef();
@@ -24,7 +24,7 @@ function ShopManager() {
       "Payment Method": item.paymentMethod,
       "Total Amount": item.totalAmount,
       "Order Date": item.orderDate,
-      "Status": item.status || "Pending",
+      "Status": item.status || "null",
       "Items Purchased": item.cartItems
         .map(cartItem => `${cartItem.name} (Size: ${cartItem.size}, Qty: ${cartItem.quantity})`)
         .join(", "),
@@ -54,6 +54,11 @@ function ShopManager() {
     fetchItems();
   }, []);
 
+  const openDialog = (item, action) => {
+    setSelectedItem({ id: item.id, action });
+    setIsOpen(true);
+  };  
+
   const updateStatus = async (id, newStatus) => {
     try {
       const itemRef = doc(db, "solditems", id);
@@ -76,19 +81,25 @@ function ShopManager() {
     }
   };
 
-  const openDialog = (item, action) => {
-    setSelectedItem({ ...item, action });
-    setIsOpen(true);
-  };
-
-  const filteredItems = soldItems.filter((item) => {
+  const filteredItems = soldItems
+  .filter((item) => {
+    const itemStatus = item.status || "Pending";
     return (
-      (filterStatus === "" || item.status === filterStatus) &&
-      (searchQuery === "" || item.cartItems.some(cartItem => cartItem.name.toLowerCase().includes(searchQuery.toLowerCase()))) &&
+      (filterStatus === "" || itemStatus === filterStatus) &&
+      (searchQuery === "" ||
+        item.cartItems.some((cartItem) =>
+          cartItem.name.toLowerCase().includes(searchQuery.toLowerCase())
+        )) &&
       (dateRange.start === "" || item.orderDate >= dateRange.start) &&
       (dateRange.end === "" || item.orderDate <= dateRange.end)
     );
+  })
+  .sort((a, b) => {
+    const statusA = a.status || "Pending";
+    const statusB = b.status || "Pending";
+    return statusA === "Pending" && statusB !== "Pending" ? -1 : 0;
   });
+
   
 
   return (
@@ -124,7 +135,6 @@ function ShopManager() {
             className="px-3 py-2 bg-gray-900 text-white rounded border border-gray-700"
             onChange={(e) => setFilterStatus(e.target.value)}
           >
-            <option value="">All Status</option>
             <option value="Pending">Pending</option>
             <option value="Approved">Approved</option>
             <option value="Declined">Declined</option>
@@ -176,15 +186,22 @@ function ShopManager() {
                 <td className="border px-4 py-2">{item.paymentMethod}</td>
                 <td className="border px-4 py-2 font-bold">{item.status || "Pending"}</td>
                 <td className="border px-4 py-2 flex justify-center gap-2">
-                  <button onClick={() => openDialog(item, "Approved")} className="bg-white text-black p-2 rounded">
-                    <FaCheck />
+                <button onClick={() => openDialog(item, "Approved")} className="bg-white text-black hover:text-green-500 p-2 rounded">
+                  <FaCheck />
+                </button>
+                <button onClick={() => openDialog(item, "Declined")} className="bg-white text-black hover:text-red-500 p-2 rounded">
+                  <FaTimes />
+                </button>
+                <button onClick={() => openDialog(item, "Pending")} className="bg-white text-black hover:text-yellow-500 p-2 rounded">
+                  <FaUndo />
+                </button>
+                {item.status === "Declined" && (
+                  <button onClick={() => deleteItem(item.id)} className="bg-red-800 p-2 rounded">
+                    <FaTrash />
                   </button>
-                  <button onClick={() => openDialog(item, "Declined")} className="bg-black p-2 rounded">
-                    <FaTimes />
-                  </button>
-                  <button onClick={() => openDialog(item, "Pending")} className="bg-gray-600 p-2 rounded">
-                    <FaUndo />
-                  </button>
+                )}
+
+
                   {item.status === "Declined" && (
                     <button onClick={() => deleteItem(item.id)} className="bg-red-800 p-2 rounded">
                       <FaTrash />
@@ -196,13 +213,20 @@ function ShopManager() {
           </tbody>
         </table>
       </div>
-      {/* Confirmation Dialog */}
       <Dialog open={isOpen} onClose={() => setIsOpen(false)} className="fixed inset-0 flex items-center justify-center bg-black/90 bg-opacity-50">
             <div className="bg-gray-900 p-6 rounded-lg text-white">
             <p>Are you sure you want to {selectedItem?.action} this item?</p>
             <div className="flex justify-end gap-4 mt-4">
                 <button className="bg-white text-black border-2 border-gray-600 px-4 py-2 rounded" onClick={() => setIsOpen(false)}>Cancel</button>
-                <button className="bg-black text-white px-4 py-2 rounded" onClick={() => updateStatus(selectedItem.id, selectedItem.action)}>Confirm</button>
+                <button 
+                  className="bg-black text-white px-4 py-2 rounded" 
+                  onClick={() => {
+                    updateStatus(selectedItem.id, selectedItem.action);
+                    setIsOpen(false);
+                  }}
+                >
+                  Confirm
+                </button>
             </div>
             </div>
         </Dialog>
